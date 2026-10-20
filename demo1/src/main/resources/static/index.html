@@ -1,0 +1,440 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Information System</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 30px 15px;
+            color: #172033;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            padding: 25px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px #0001;
+        }
+
+        h1, h2 {
+            color: #173b72;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(
+                auto-fit, minmax(210px, 1fr)
+            );
+            gap: 15px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            margin: 3px;
+        }
+
+        .primary { background: #2563eb; }
+        .edit { background: #0f766e; }
+        .delete { background: #dc2626; }
+        .cancel { background: #64748b; }
+
+        .actions {
+            margin-top: 18px;
+        }
+
+        #message {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #eff6ff;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Student Information System</h1>
+
+    <h2 id="formHeading">Register Student</h2>
+
+    <form id="studentForm">
+
+        <div class="form-grid">
+
+            <div>
+                <label for="rollNumber">Roll Number</label>
+                <input id="rollNumber" required>
+            </div>
+
+            <div>
+                <label for="studentName">Student Name</label>
+                <input id="studentName" required>
+            </div>
+
+            <div>
+                <label for="email">Email</label>
+                <input id="email" type="email" required>
+            </div>
+
+            <div>
+                <label for="department">Department</label>
+                <select id="department" required>
+                    <option value="">Select Department</option>
+                    <option value="CSE">CSE</option>
+                    <option value="AIML">AIML</option>
+                    <option value="IT">IT</option>
+                    <option value="ECE">ECE</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="marks">Marks (0–100)</label>
+                <input id="marks" type="number"
+                       min="0" max="100" step="0.01" required>
+            </div>
+
+        </div>
+
+        <div class="actions">
+            <button class="primary" id="saveButton" type="submit">
+                Insert Student
+            </button>
+
+            <button class="cancel" id="cancelButton"
+                    type="button" hidden>
+                Cancel Edit
+            </button>
+        </div>
+
+    </form>
+
+    <p id="message" role="status"></p>
+
+    <h2>Student Records</h2>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>Roll Number</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Department</th>
+                <th>Marks</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+
+            <tbody id="studentsBody">
+            <tr>
+                <td colspan="7">Loading students...</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<script>
+    const form = document.getElementById("studentForm");
+    const message = document.getElementById("message");
+    const studentsBody = document.getElementById("studentsBody");
+    const saveButton = document.getElementById("saveButton");
+    const cancelButton = document.getElementById("cancelButton");
+
+    let editingStudentId = null;
+
+    function showMessage(text, isError = false) {
+        message.textContent = text;
+        message.className = isError ? "error" : "success";
+    }
+
+    async function apiRequest(url, options = {}) {
+        const response = await fetch(url, options);
+
+        const responseText = await response.text();
+
+        let data = {};
+
+        try {
+            data = responseText ? JSON.parse(responseText) : {};
+        } catch (error) {
+            data = {};
+        }
+
+        if (!response.ok) {
+            const errorMessage =
+                data.message ||
+                data.detail ||
+                data.error ||
+                responseText ||
+                "Unknown server error";
+
+            throw new Error(
+                "HTTP " + response.status + ": " + errorMessage
+            );
+        }
+
+        return data;
+    }
+
+
+
+    // GET: DISPLAY ALL STUDENTS
+    async function loadStudents() {
+        try {
+            const students = await apiRequest("/api/students");
+
+            studentsBody.replaceChildren();
+
+            if (students.length === 0) {
+                const row = studentsBody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 7;
+                cell.textContent = "No student records found.";
+                return;
+            }
+
+            students.forEach(student => {
+                const row = studentsBody.insertRow();
+
+                [
+                    student.studentId,
+                    student.rollNumber,
+                    student.studentName,
+                    student.email,
+                    student.department,
+                    student.marks
+                ].forEach(value => {
+                    const cell = row.insertCell();
+                    cell.textContent = value;
+                });
+
+                const actionCell = row.insertCell();
+
+                // EDIT BUTTON
+                const editButton = document.createElement("button");
+                editButton.textContent = "Edit";
+                editButton.className = "edit";
+                editButton.type = "button";
+
+                editButton.addEventListener("click", () => {
+                    editStudent(student);
+                });
+
+                // DELETE BUTTON
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Delete";
+                deleteButton.className = "delete";
+                deleteButton.type = "button";
+
+                deleteButton.addEventListener("click", () => {
+                    deleteStudent(student);
+                });
+
+                actionCell.append(editButton, deleteButton);
+            });
+
+        } catch (error) {
+            showMessage(error.message, true);
+
+            studentsBody.replaceChildren();
+
+            const row = studentsBody.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = 7;
+            cell.textContent = "Unable to load student records.";
+        }
+    }
+
+    // LOAD EXISTING DETAILS INTO THE FORM
+    function editStudent(student) {
+        editingStudentId = student.studentId;
+
+        document.getElementById("rollNumber").value =
+            student.rollNumber;
+
+        document.getElementById("studentName").value =
+            student.studentName;
+
+        document.getElementById("email").value =
+            student.email;
+
+        document.getElementById("department").value =
+            student.department;
+
+        document.getElementById("marks").value =
+            student.marks;
+
+        document.getElementById("formHeading").textContent =
+            "Update Student";
+
+        saveButton.textContent = "Save Changes";
+        cancelButton.hidden = false;
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // DELETE STUDENT
+    async function deleteStudent(student) {
+        const confirmDelete = confirm(
+            "Are you sure you want to delete " +
+            student.studentName + "?"
+        );
+
+        if (!confirmDelete) {
+            return;
+        }
+
+        try {
+            const result = await apiRequest(
+                "/api/students/" + student.studentId,
+                { method: "DELETE" }
+            );
+
+            showMessage(result.message);
+            loadStudents();
+
+        } catch (error) {
+            showMessage(error.message, true);
+        }
+    }
+
+    // INSERT OR UPDATE STUDENT
+    form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        const student = {
+            rollNumber:
+                document.getElementById("rollNumber").value.trim(),
+
+            studentName:
+                document.getElementById("studentName").value.trim(),
+
+            email:
+                document.getElementById("email").value.trim(),
+
+            department:
+            document.getElementById("department").value,
+
+            marks:
+                Number(document.getElementById("marks").value)
+        };
+
+        if (student.marks < 0 || student.marks > 100) {
+            showMessage("Marks must be between 0 and 100.", true);
+            return;
+        }
+
+        const isEditing = editingStudentId !== null;
+
+        const url = isEditing
+            ? "/api/students/" + editingStudentId
+            : "/api/students";
+
+        const method = isEditing ? "PUT" : "POST";
+
+        try {
+            const result = await apiRequest(url, {
+                method: method,
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(student)
+            });
+
+            showMessage(
+                result.message ||
+                (isEditing
+                    ? "Student updated successfully."
+                    : "Student inserted successfully.")
+            );
+
+            resetForm();
+            await loadStudents();
+
+        } catch (error) {
+            showMessage(error.message, true);
+        }
+    });
+
+    // RESET FORM AFTER UPDATE OR WHEN CANCEL IS CLICKED
+    function resetForm() {
+        form.reset();
+
+        editingStudentId = null;
+
+        document.getElementById("formHeading").textContent =
+            "Register Student";
+
+        saveButton.textContent = "Insert Student";
+        cancelButton.hidden = true;
+    }
+
+    cancelButton.addEventListener("click", resetForm);
+
+    // LOAD RECORDS WHEN THE PAGE OPENS
+    loadStudents();
+</script>
+
+</body>
+</html>
